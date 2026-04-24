@@ -1,0 +1,315 @@
+{
+    "salah_types": {
+        "2_rakat_prayer": {
+            "name": "Fajr / Sunnah / Nafl",
+            "sequence": [
+                {
+                    "Rak'ah 1": [
+                        {
+                            "state": "Takbirat al-Ihram",
+                            "description": "Opening Takbir to start prayer"
+                        },
+                        {
+                            "state": "Qiyam",
+                            "description": "Standing and recitation of Surah Al-Fatihah and Quran"
+                        },
+                        {
+                            "state": "Ruku",
+                            "description": "Bowing"
+                        },
+                        {
+                            "state": "I'tidal",
+                            "description": "Standing up from bowing"
+                        },
+                        {
+                            "state": "Sajda 1",
+                            "description": "First prostration"
+                        },
+                        {
+                            "state": "Jalsa",
+                            "description": "Sitting between prostrations"
+                        },
+                        {
+                            "state": "Sajda 2",
+                            "description": "Second prostration"
+                        }
+                    ]
+                },
+                {
+                    "Rak'ah 2": [
+                        {
+                            "state": "Qiyam",
+                            "description": "Standing and recitation of Surah Al-Fatihah and Quran"
+                        },
+                        {
+                            "state": "Ruku",
+                            "description": "Bowing"
+                        },
+                        {
+                            "state": "I'tidal",
+                            "description": "Standing up from bowing"
+                        },
+                        {
+                            "state": "Sajda 1",
+                            "description": "First prostration"
+                        },
+                        {
+                            "state": "Jalsa",
+                            "description": "Sitting between prostrations"
+                        },
+                        {
+                            "state": "Sajda 2",
+                            "description": "Second prostration"
+                        },
+                        {
+                            "state": "Tashahhud & Salawat",
+                            "description": "Final sitting with testimony and prayers for the Prophet"
+                        },
+                        {
+                            "state": "Taslim",
+                            "description": "Ending prayer by turning head right and left"
+                        }
+                    ]
+                }
+            ]
+        },
+        "3_rakat_prayer": {
+            "name": "Maghrib / Witr",
+            "sequence": [
+                {
+                    "Rak'ah 1": [
+                        {
+                            "state": "Takbirat al-Ihram",
+                            "description": "Opening Takbir to start prayer"
+                        },
+                        {
+                            "state": "Qiyam",
+                            "description": "Standing and recitation of Surah Al-Fatihah and Quran"
+                        },
+                        {
+                            "state": "Ruku",
+                            "description": "Bowing"
+                        },
+                        {
+                            "state": "I'tidal",
+                            "description": "Standing up from bowing"
+                        },
+                        {
+                            "state": "Sajda 1",
+                            "description": "First prostration"
+                        },
+                        {
+                            "state": "Jalsa",
+                            "description": "Sitting between prostrations"
+                        },
+                        {
+                            "state": "Sajda 2",
+                            "description": "Second prostration"
+                        }
+                    ]
+                },
+                {
+                    "Rak'ah 2": [
+                        {
+                            "state": "Qiyam",
+                            "description": "Standing and recitation of Surah Al-Fatihah and Quran"
+                        },
+                        {
+                            "state": "Ruku",
+                            "description": "Bowing"
+                        },
+                        {
+                            "state": "I'tidal",
+                            "description": "Standing up from bowing"
+                        },
+                        {
+                            "state": "Sajda 1",
+                            "description": "First prostration"
+                        },
+                        {
+                            "state": "Jalsa",
+                            "description": "Sitting between prostrations"
+                        },
+                        {
+                            "state": "Sajda 2",
+                            "description": "Second prostration"
+                        },
+                        {
+                            "state": "Tashahhud",
+                            "description": "Middle sitting and testimony"
+                        }
+                    ]
+                },
+                {
+                    "Rak'ah 3": [
+                        {
+                            "state": "Qiyam",
+                            "description": "Standing and recitation of Surah Al-Fatihah and Quran"
+                        },
+                        {
+                            "state": "Ruku",
+                            "description": "Bowing"
+                        },
+                        {
+                            "state": "I'tidal",
+                            "description": "Standing up from bowing"
+                        },
+                        {
+                            "state": "Sajda 1",
+                            "description": "First prostration"
+                        },
+                        {
+                            "state": "Jalsa",
+                            "description": "Sitting between prostrations"
+                        },
+                        {
+                            "state": "Sajda 2",
+                            "description": "Second prostration"
+                        },
+                        {
+                            "state": "Tashahhud & Salawat",
+                            "description": "Final sitting with testimony and prayers for the Prophet"
+                        },
+                        {
+                            "state": "Taslim",
+                            "description": "Ending prayer by turning head right and left"
+                        }
+                    ]
+                }
+            ]
+        },
+        "4_rakat_prayer": {
+            "name": "Dhuhr / Asr / Isha",
+            "sequence": [
+                {
+                    "Rak'ah 1": [
+                        {
+                            "state": "Takbirat al-Ihram",
+                            "description": "Opening Takbir to start prayer"
+                        },
+                        {
+                            "state": "Qiyam",
+                            "description": "Standing and recitation of Surah Al-Fatihah and Quran"
+                        },
+                        {
+                            "state": "Ruku",
+                            "description": "Bowing"
+                        },
+                        {
+                            "state": "I'tidal",
+                            "description": "Standing up from bowing"
+                        },
+                        {
+                            "state": "Sajda 1",
+                            "description": "First prostration"
+                        },
+                        {
+                            "state": "Jalsa",
+                            "description": "Sitting between prostrations"
+                        },
+                        {
+                            "state": "Sajda 2",
+                            "description": "Second prostration"
+                        }
+                    ]
+                },
+                {
+                    "Rak'ah 2": [
+                        {
+                            "state": "Qiyam",
+                            "description": "Standing and recitation of Surah Al-Fatihah and Quran"
+                        },
+                        {
+                            "state": "Ruku",
+                            "description": "Bowing"
+                        },
+                        {
+                            "state": "I'tidal",
+                            "description": "Standing up from bowing"
+                        },
+                        {
+                            "state": "Sajda 1",
+                            "description": "First prostration"
+                        },
+                        {
+                            "state": "Jalsa",
+                            "description": "Sitting between prostrations"
+                        },
+                        {
+                            "state": "Sajda 2",
+                            "description": "Second prostration"
+                        },
+                        {
+                            "state": "Tashahhud",
+                            "description": "Middle sitting and testimony"
+                        }
+                    ]
+                },
+                {
+                    "Rak'ah 3": [
+                        {
+                            "state": "Qiyam",
+                            "description": "Standing and recitation of Surah Al-Fatihah and Quran"
+                        },
+                        {
+                            "state": "Ruku",
+                            "description": "Bowing"
+                        },
+                        {
+                            "state": "I'tidal",
+                            "description": "Standing up from bowing"
+                        },
+                        {
+                            "state": "Sajda 1",
+                            "description": "First prostration"
+                        },
+                        {
+                            "state": "Jalsa",
+                            "description": "Sitting between prostrations"
+                        },
+                        {
+                            "state": "Sajda 2",
+                            "description": "Second prostration"
+                        }
+                    ]
+                },
+                {
+                    "Rak'ah 4": [
+                        {
+                            "state": "Qiyam",
+                            "description": "Standing and recitation of Surah Al-Fatihah and Quran"
+                        },
+                        {
+                            "state": "Ruku",
+                            "description": "Bowing"
+                        },
+                        {
+                            "state": "I'tidal",
+                            "description": "Standing up from bowing"
+                        },
+                        {
+                            "state": "Sajda 1",
+                            "description": "First prostration"
+                        },
+                        {
+                            "state": "Jalsa",
+                            "description": "Sitting between prostrations"
+                        },
+                        {
+                            "state": "Sajda 2",
+                            "description": "Second prostration"
+                        },
+                        {
+                            "state": "Tashahhud & Salawat",
+                            "description": "Final sitting with testimony and prayers for the Prophet"
+                        },
+                        {
+                            "state": "Taslim",
+                            "description": "Ending prayer by turning head right and left"
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}

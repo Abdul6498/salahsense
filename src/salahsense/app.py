@@ -14,9 +14,12 @@ def main() -> None:
     print(f"Profile: {settings.profile_name}")
     print(
         "Thresholds -> "
-        f"HIGH: {settings.high_y}, MID: {settings.mid_y}, LOW: {settings.low_y}"
+        f"HIGH: {settings.thresholds.high_y}, "
+        f"MID: {settings.thresholds.mid_y}, "
+        f"LOW: {settings.thresholds.low_y}"
     )
-    print("Next step: implement Phase 1A image calibration.")
+    print(f"Process width: {settings.runtime.process_width}")
+    print("Phase 1 runner: python scripts/count_rakat_video.py --video ... --model ...")
 
 
 if __name__ == "__main__":

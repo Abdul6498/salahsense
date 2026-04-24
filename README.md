@@ -56,6 +56,28 @@ pip install -e .
 python -m salahsense.app
 ```
 
+## Phase 1 Video Counter
+
+Use the first modular rakat counter pipeline on a local namaz video:
+
+```bash
+python scripts/count_rakat_video.py \
+  --video videos/namaz_1.mp4 \
+  --model models/pose_landmarker_lite.task \
+  --config config/thresholds.toml \
+  --salah-states config/salah_states.json \
+  --log-file logs/rakat_run.jsonl
+```
+
+`--log-file` writes detailed JSONL logs with per-frame state, transitions, rakat progress, and all pose landmarks (`index`, `name`, `x`, `y`, `z`, `visibility`, `presence`).
+
+Pipeline modules used:
+- `capture` -> frame reader and resizing
+- `pose` -> MediaPipe pose estimation
+- `state_machine` -> vertical level + direction detection
+- `counting` -> sequence match (`HIGH -> LOW -> MID -> LOW -> HIGH`)
+- `output` -> terminal logs and final rakat summary
+
 ## Step-by-Step Milestones
 
 1. Phase 1A: image calibration for `HIGH`, `MID`, `LOW`

@@ -2,7 +2,20 @@ profile_name = "baseline_user"
 
 [thresholds]
 # NOTE: In image coordinates, larger Y means lower in the frame.
-# These are starter values and should be calibrated from your own samples.
+# These values are starter points. Calibrate using your own sample frames.
 high_y = 0.30
 mid_y = 0.55
 low_y = 0.78
+
+# Allowed distance from mid_y to accept MID state.
+mid_tolerance = 0.07
+
+# Minimum Y change between frames to report GOING_UP/GOING_DOWN.
+direction_delta = 0.004
+
+[runtime]
+# Frames are resized to this width for faster inference.
+process_width = 640
+
+# Print one frame-level debug line every N frames.
+frame_log_interval = 15
