@@ -1,0 +1,8 @@
+profile_name = "baseline_user"
+
+[thresholds]
+# NOTE: In image coordinates, larger Y means lower in the frame.
+# These are starter values and should be calibrated from your own samples.
+high_y = 0.30
+mid_y = 0.55
+low_y = 0.78

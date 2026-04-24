@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "salahsense"
+version = "0.1.0"
+description = "Modular, step-by-step Salah support toolkit"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "SalahSense Team" }
+]
+dependencies = [
+  "numpy>=1.26",
+  "opencv-python>=4.10",
+  "mediapipe>=0.10.14"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6"
+]
