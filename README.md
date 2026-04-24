@@ -66,10 +66,15 @@ python scripts/count_rakat_video.py \
   --model models/pose_landmarker_lite.task \
   --config config/thresholds.toml \
   --salah-states config/salah_states.json \
+  --salah-sequences config/salah_sequences.json \
+  --salah-type 2_rakat_prayer \
   --log-file logs/rakat_run.jsonl
 ```
 
 `--log-file` writes detailed JSONL logs with per-frame state, transitions, rakat progress, and all pose landmarks (`index`, `name`, `x`, `y`, `z`, `visibility`, `presence`).
+
+`--salah-type` chooses one of the configured prayer profiles (`2_rakat_prayer`, `3_rakat_prayer`, `4_rakat_prayer`).
+The runner uses `salah_sequences.json` to track sequence progress and target rakat count.
 
 Pipeline modules used:
 - `capture` -> frame reader and resizing

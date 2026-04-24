@@ -53,13 +53,25 @@ class SessionLogger:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._file = self.path.open("w", encoding="utf-8")
 
-    def log_startup(self, *, video_path: str, model_path: str, config_path: str) -> None:
+    def log_startup(
+        self,
+        *,
+        video_path: str,
+        model_path: str,
+        config_path: str,
+        salah_type: str | None = None,
+        salah_name: str | None = None,
+        target_rakats: int | None = None,
+    ) -> None:
         self._write(
             {
                 "event": "startup",
                 "video_path": video_path,
                 "model_path": model_path,
                 "config_path": config_path,
+                "salah_type": salah_type,
+                "salah_name": salah_name,
+                "target_rakats": target_rakats,
             }
         )
 
@@ -76,6 +88,11 @@ class SessionLogger:
         feature_snapshot: dict,
         salah_state_english: str,
         salah_state_arabic: str,
+        salah_type: str,
+        target_rakats: int,
+        sequence_index: int,
+        sequence_total: int,
+        next_expected_state: str | None,
         rakat_count: int,
         current_rakat: int,
     ) -> None:
@@ -93,6 +110,11 @@ class SessionLogger:
                 "features": feature_snapshot,
                 "salah_state_english": salah_state_english,
                 "salah_state_arabic": salah_state_arabic,
+                "salah_type": salah_type,
+                "target_rakats": target_rakats,
+                "sequence_index": sequence_index,
+                "sequence_total": sequence_total,
+                "next_expected_state": next_expected_state,
                 "rakat_count": rakat_count,
                 "current_rakat": current_rakat,
                 "landmarks": self._serialize_landmarks(observation.landmarks),

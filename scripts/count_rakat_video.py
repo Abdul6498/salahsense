@@ -17,8 +17,10 @@ from pathlib import Path
 import cv2
 
 from salahsense.capture import VideoReader
+from salahsense.config.salah_sequences import SalahSequenceCatalog
 from salahsense.config.salah_states import SalahStateCatalog
 from salahsense.config.settings import load_settings
+from salahsense.counting import SalahSequenceTracker
 from salahsense.output import (
     SessionLogger,
     draw_pose_skeleton,
@@ -56,6 +58,17 @@ def build_parser() -> argparse.ArgumentParser:
         default="config/salah_states.json",
         help="Path to Salah state names/definitions JSON",
     )
+    parser.add_argument(
+        "--salah-sequences",
+        default="config/salah_sequences.json",
+        help="Path to Salah sequence definitions JSON",
+    )
+    parser.add_argument(
+        "--salah-type",
+        default="2_rakat_prayer",
+        choices=["2_rakat_prayer", "3_rakat_prayer", "4_rakat_prayer"],
+        help="Which salah profile to run against sequence/target logic",
+    )
     return parser
 
 
@@ -65,6 +78,14 @@ def main() -> None:
     settings = load_settings(args.config)
     print_startup(video_path=args.video, model_path=args.model, config_path=args.config)
     state_catalog = SalahStateCatalog.from_json(args.salah_states)
+    sequence_catalog = SalahSequenceCatalog.from_json(args.salah_sequences)
+    sequence_profile = sequence_catalog.get_profile(args.salah_type)
+    sequence_tracker = SalahSequenceTracker(sequence_profile)
+    sequence_progress = sequence_tracker.progress()
+    print(
+        f"[INFO] Salah type: {sequence_profile.profile_key} "
+        f"({sequence_profile.profile_name}), target_rakats={sequence_profile.expected_rakats}"
+    )
 
     if not Path(args.model).exists():
         raise FileNotFoundError(
@@ -77,10 +98,18 @@ def main() -> None:
     state_machine = SalahStateMachine(min_stable_frames=2)
     logger = SessionLogger(log_path=args.log_file)
     previous_completed_rakats = 0
+    target_reached_announced = False
     paused = False
     should_stop = False
     print(f"[INFO] Logging to: {args.log_file}")
-    logger.log_startup(video_path=args.video, model_path=args.model, config_path=args.config)
+    logger.log_startup(
+        video_path=args.video,
+        model_path=args.model,
+        config_path=args.config,
+        salah_type=sequence_profile.profile_key,
+        salah_name=sequence_profile.profile_name,
+        target_rakats=sequence_profile.expected_rakats,
+    )
 
     try:
         for packet in reader.frames():
@@ -96,6 +125,7 @@ def main() -> None:
                 draw_pose_skeleton(packet.frame_bgr, observation.landmarks)
 
             if update.state_changed:
+                sequence_progress = sequence_tracker.on_state_change(update.state)
                 logger.log_transition(
                     frame_index=packet.frame_index,
                     state_name=update.state.value,
@@ -103,7 +133,6 @@ def main() -> None:
                     current_rakat=update.current_rakat,
                     reason=update.reason,
                 )
-            if update.state_changed:
                 print_transition(
                     state_name=update.state.value,
                     reason=update.reason,
@@ -111,13 +140,24 @@ def main() -> None:
                     current_rakat=update.current_rakat,
                 )
 
+            next_expected = (
+                sequence_progress.next_expected_state.value
+                if sequence_progress.next_expected_state is not None
+                else "DONE"
+            )
+            sequence_progress_text = f"{sequence_progress.current_index}/{sequence_progress.total_states}"
+
             draw_top_overlay(
                 packet.frame_bgr,
+                prayer_name=sequence_profile.profile_name,
+                target_rakats=sequence_profile.expected_rakats,
                 rakat_count=update.completed_rakats,
                 current_rakat=update.current_rakat,
                 fsm_state=update.state.value,
                 posture=update.detected_posture.value,
                 salah_state=f"{salah_state.english} ({salah_state.arabic})",
+                next_expected_state=next_expected,
+                sequence_progress_text=sequence_progress_text,
                 reason=update.reason,
                 nose_y=observation.nose_y,
             )
@@ -138,6 +178,11 @@ def main() -> None:
                 },
                 salah_state_english=salah_state.english,
                 salah_state_arabic=salah_state.arabic,
+                salah_type=sequence_profile.profile_key,
+                target_rakats=sequence_profile.expected_rakats,
+                sequence_index=sequence_progress.current_index,
+                sequence_total=sequence_progress.total_states,
+                next_expected_state=next_expected,
                 rakat_count=update.completed_rakats,
                 current_rakat=update.current_rakat,
             )
@@ -149,6 +194,22 @@ def main() -> None:
                     posture=update.detected_posture.value,
                     fsm_state=update.state.value,
                     salah_state=f"{salah_state.english} ({salah_state.arabic})",
+                )
+
+            if (
+                not target_reached_announced
+                and update.completed_rakats >= sequence_profile.expected_rakats
+            ):
+                print(
+                    f"[INFO] Target reached for {sequence_profile.profile_name}: "
+                    f"{update.completed_rakats}/{sequence_profile.expected_rakats} rakats."
+                )
+                target_reached_announced = True
+
+            if update.completed_rakats > sequence_profile.expected_rakats:
+                print(
+                    f"[WARN] Extra rakat detected: {update.completed_rakats} "
+                    f"(target {sequence_profile.expected_rakats})."
                 )
 
             key = cv2.waitKey(1) & 0xFF

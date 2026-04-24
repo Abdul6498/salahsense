@@ -38,21 +38,30 @@ def draw_pose_skeleton(frame: cv2.typing.MatLike, landmarks: list) -> None:
 def draw_top_overlay(
     frame: cv2.typing.MatLike,
     *,
+    prayer_name: str,
+    target_rakats: int,
     rakat_count: int,
     current_rakat: int,
     fsm_state: str,
     posture: str,
     salah_state: str,
+    next_expected_state: str,
+    sequence_progress_text: str,
     reason: str,
     nose_y: float | None,
 ) -> None:
     """Draw small transparent text at the top of the frame."""
     nose_text = f"{nose_y:.3f}" if nose_y is not None else "N/A"
+    target_color = (0, 220, 0) if rakat_count == target_rakats else (0, 0, 255)
 
     lines = [
+        f"Prayer: {prayer_name}",
+        f"Target Rakats: {target_rakats}",
         f"Completed Rakats: {rakat_count}",
         f"Current Rakat: {current_rakat}",
         f"Salah: {salah_state}",
+        f"Next Expected: {next_expected_state}",
+        f"Sequence: {sequence_progress_text}",
         f"FSM State: {fsm_state}",
         f"Detected Posture: {posture}",
         f"Reason: {reason}",
@@ -61,14 +70,15 @@ def draw_top_overlay(
     ]
 
     y = 18
-    for line in lines:
+    for idx, line in enumerate(lines):
+        color = target_color if idx == 1 else (245, 245, 245)
         cv2.putText(
             frame,
             line,
             (12, y),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.48,
-            (245, 245, 245),
+            color,
             1,
             cv2.LINE_AA,
         )
