@@ -74,8 +74,8 @@ python scripts/count_rakat_video.py \
 Pipeline modules used:
 - `capture` -> frame reader and resizing
 - `pose` -> MediaPipe pose estimation
-- `state_machine` -> vertical level + direction detection
-- `counting` -> sequence match (`HIGH -> LOW -> MID -> LOW -> HIGH`)
+- `state_machine` -> feature-based Salah FSM (`QIYAM -> RUKU -> QAUMA -> SUJUD_1 -> JALSA -> SUJUD_2 -> QIYAM_NEXT/TASHAHHUD`)
+- `counting` -> rakat counting from validated Salah-state transitions
 - `output` -> terminal logs and final rakat summary
 
 ## Step-by-Step Milestones

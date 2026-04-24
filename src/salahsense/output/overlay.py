@@ -40,12 +40,11 @@ def draw_top_overlay(
     *,
     rakat_count: int,
     current_rakat: int,
-    stage: str,
-    level: str,
+    fsm_state: str,
+    posture: str,
     salah_state: str,
-    direction: str,
+    reason: str,
     nose_y: float | None,
-    pattern: str,
 ) -> None:
     """Draw small transparent text at the top of the frame."""
     nose_text = f"{nose_y:.3f}" if nose_y is not None else "N/A"
@@ -54,11 +53,10 @@ def draw_top_overlay(
         f"Completed Rakats: {rakat_count}",
         f"Current Rakat: {current_rakat}",
         f"Salah: {salah_state}",
-        f"Stage: {stage}",
-        f"Level: {level}",
-        f"Direction: {direction}",
+        f"FSM State: {fsm_state}",
+        f"Detected Posture: {posture}",
+        f"Reason: {reason}",
         f"Nose Y: {nose_text}",
-        f"Pattern: {pattern}",
         "Space: Play/Pause | q: Quit",
     ]
 

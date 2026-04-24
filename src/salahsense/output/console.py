@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from salahsense.counting import CounterUpdate
-from salahsense.state_machine import MovementDirection, VerticalLevel
-
 
 def print_startup(video_path: str, model_path: str, config_path: str) -> None:
     print("[INFO] SalahSense Phase-1 Rakat Counter")
@@ -16,23 +13,27 @@ def print_startup(video_path: str, model_path: str, config_path: str) -> None:
 def print_frame_debug(
     frame_index: int,
     nose_y: float | None,
-    level: VerticalLevel,
-    direction: MovementDirection,
+    posture: str,
+    fsm_state: str,
     salah_state: str,
 ) -> None:
     nose_text = f"{nose_y:.3f}" if nose_y is not None else "N/A"
     print(
         f"[FRAME {frame_index}] nose_y={nose_text} "
-        f"level={level.value} direction={direction.value} salah_state={salah_state}"
+        f"posture={posture} fsm_state={fsm_state} salah_state={salah_state}"
     )
 
 
-def print_transition(level: VerticalLevel, update: CounterUpdate) -> None:
-    pattern_text = " -> ".join(item.value for item in update.matched_pattern) or "(empty)"
+def print_transition(
+    *,
+    state_name: str,
+    reason: str,
+    completed_rakats: int,
+    current_rakat: int,
+) -> None:
     print(
-        f"[TRANSITION] level={level.value} stage={update.stage.value} "
-        f"reason={update.reason} pattern={pattern_text} "
-        f"completed={update.rakat_count} current={update.current_rakat}"
+        f"[TRANSITION] state={state_name} reason={reason} "
+        f"completed={completed_rakats} current={current_rakat}"
     )
 
 

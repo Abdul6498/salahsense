@@ -19,7 +19,6 @@ import cv2
 from salahsense.capture import VideoReader
 from salahsense.config.salah_states import SalahStateCatalog
 from salahsense.config.settings import load_settings
-from salahsense.counting import RakatCounter
 from salahsense.output import (
     SessionLogger,
     draw_pose_skeleton,
@@ -31,7 +30,7 @@ from salahsense.output import (
     print_transition,
 )
 from salahsense.pose import PoseEstimator
-from salahsense.state_machine import VerticalStateMachine
+from salahsense.state_machine import SalahStateMachine
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -74,9 +73,10 @@ def main() -> None:
 
     reader = VideoReader(video_path=args.video, process_width=settings.runtime.process_width)
     estimator = PoseEstimator(model_path=args.model)
-    state_machine = VerticalStateMachine(settings.thresholds)
-    counter = RakatCounter()
+    # Lower stability window to keep transitions responsive in real-time use.
+    state_machine = SalahStateMachine(min_stable_frames=2)
     logger = SessionLogger(log_path=args.log_file)
+    previous_completed_rakats = 0
     paused = False
     should_stop = False
     print(f"[INFO] Logging to: {args.log_file}")
@@ -85,63 +85,69 @@ def main() -> None:
     try:
         for packet in reader.frames():
             observation = estimator.detect(packet)
-            state = state_machine.update(observation.nose_y)
-            salah_state = state_catalog.resolve_runtime_state(
-                level=state.level,
-                direction=state.direction,
-                stage=counter.stage,
-            )
+            update = state_machine.update(observation)
+            salah_state = state_catalog.resolve_from_fsm(update.state)
+
+            if update.completed_rakats > previous_completed_rakats:
+                print_rakat_completed(update.completed_rakats)
+                previous_completed_rakats = update.completed_rakats
 
             if observation.pose_detected and observation.landmarks is not None:
                 draw_pose_skeleton(packet.frame_bgr, observation.landmarks)
 
-            if state.level_changed:
-                update = counter.on_level_transition(state.level)
-                print_transition(state.level, update)
-
-                if update.completed_rakat:
-                    print_rakat_completed(update.rakat_count)
+            if update.state_changed:
                 logger.log_transition(
                     frame_index=packet.frame_index,
-                    level=state.level.value,
-                    matched_pattern=[level.value for level in counter.matched_pattern],
-                    rakat_count=counter.rakat_count,
-                    current_rakat=counter.current_rakat,
-                    stage=counter.stage.value,
+                    state_name=update.state.value,
+                    rakat_count=update.completed_rakats,
+                    current_rakat=update.current_rakat,
                     reason=update.reason,
                 )
+            if update.state_changed:
+                print_transition(
+                    state_name=update.state.value,
+                    reason=update.reason,
+                    completed_rakats=update.completed_rakats,
+                    current_rakat=update.current_rakat,
+                )
 
-            pattern_text = " -> ".join(level.value for level in counter.matched_pattern) or "(empty)"
             draw_top_overlay(
                 packet.frame_bgr,
-                rakat_count=counter.rakat_count,
-                current_rakat=counter.current_rakat,
-                stage=counter.stage.value,
-                level=state.level.value,
+                rakat_count=update.completed_rakats,
+                current_rakat=update.current_rakat,
+                fsm_state=update.state.value,
+                posture=update.detected_posture.value,
                 salah_state=f"{salah_state.english} ({salah_state.arabic})",
-                direction=state.direction.value,
+                reason=update.reason,
                 nose_y=observation.nose_y,
-                pattern=pattern_text,
             )
             cv2.imshow("SalahSense Phase-1 (press q to quit)", packet.frame_bgr)
             logger.log_frame(
                 frame_index=packet.frame_index,
                 timestamp_ms=packet.timestamp_ms,
                 observation=observation,
-                state=state,
+                posture=update.detected_posture.value,
+                fsm_state=update.state.value,
+                state_changed=update.state_changed,
+                transition_reason=update.reason,
+                feature_snapshot={
+                    "torso_from_vertical_deg": update.features.torso_from_vertical_deg,
+                    "knee_angle_deg": update.features.knee_angle_deg,
+                    "nose_minus_hip_y": update.features.nose_minus_hip_y,
+                    "hip_mid_y": update.features.hip_mid_y,
+                },
                 salah_state_english=salah_state.english,
                 salah_state_arabic=salah_state.arabic,
-                rakat_count=counter.rakat_count,
-                current_rakat=counter.current_rakat,
-                matched_pattern=[level.value for level in counter.matched_pattern],
+                rakat_count=update.completed_rakats,
+                current_rakat=update.current_rakat,
             )
 
             if packet.frame_index % settings.runtime.frame_log_interval == 0:
                 print_frame_debug(
                     frame_index=packet.frame_index,
                     nose_y=observation.nose_y,
-                    level=state.level,
-                    direction=state.direction,
+                    posture=update.detected_posture.value,
+                    fsm_state=update.state.value,
                     salah_state=f"{salah_state.english} ({salah_state.arabic})",
                 )
 
@@ -168,13 +174,13 @@ def main() -> None:
             if should_stop:
                 break
     finally:
-        logger.log_summary(final_rakat_count=counter.rakat_count)
+        logger.log_summary(final_rakat_count=update.completed_rakats if 'update' in locals() else 0)
         logger.close()
         estimator.close()
         reader.close()
         cv2.destroyAllWindows()
 
-    print_summary(counter.rakat_count)
+    print_summary(update.completed_rakats if 'update' in locals() else 0)
 
 
 if __name__ == "__main__":

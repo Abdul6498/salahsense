@@ -1,4 +1,4 @@
-"""Load Salah state definitions and map runtime posture to readable Salah states."""
+"""Load Salah state definitions and map FSM state names to readable labels."""
 
 from __future__ import annotations
 
@@ -6,8 +6,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
-from salahsense.counting.rakat_counter import RakatStage
-from salahsense.state_machine import MovementDirection, VerticalLevel
+from salahsense.state_machine import SalahState
 
 
 @dataclass(frozen=True)
@@ -20,11 +19,10 @@ class SalahStateInfo:
 
 
 class SalahStateCatalog:
-    """Lookup and runtime mapping for Salah states."""
+    """Lookup for Salah state labels loaded from `salah_states.json`."""
 
     def __init__(self, states: dict[str, SalahStateInfo]) -> None:
         self._states = states
-        self._seen_ruku_in_current_cycle = False
 
     @classmethod
     def from_json(cls, path: str) -> "SalahStateCatalog":
@@ -46,42 +44,30 @@ class SalahStateCatalog:
             )
         return cls(states=states)
 
-    def resolve_runtime_state(
-        self,
-        *,
-        level: VerticalLevel,
-        direction: MovementDirection,
-        stage: RakatStage,
-    ) -> SalahStateInfo:
-        """Map current level/stage to best matching Salah state label."""
-        if level == VerticalLevel.MID and stage == RakatStage.WAIT_FIRST_LOW:
-            self._seen_ruku_in_current_cycle = True
-            return self._state_or_fallback("Bowing")
-
-        # In many real videos, Ruku can appear as UNKNOWN if thresholds are tight.
-        # Keep a Bowing context before first sujud so Qauma can be recognized next.
-        if level == VerticalLevel.UNKNOWN and stage == RakatStage.WAIT_FIRST_LOW:
-            if direction in (MovementDirection.GOING_DOWN, MovementDirection.STILL):
-                self._seen_ruku_in_current_cycle = True
-                return self._state_or_fallback("Bowing")
-
-        if level == VerticalLevel.LOW:
-            self._seen_ruku_in_current_cycle = False
-            return self._state_or_fallback("Prostration")
-
-        if level == VerticalLevel.HIGH:
-            # Qauma is a short stand after Ruku before moving to first sujud.
-            if stage == RakatStage.WAIT_FIRST_LOW and self._seen_ruku_in_current_cycle:
-                if direction in (MovementDirection.GOING_UP, MovementDirection.STILL):
-                    return self._state_or_fallback("Rising from Bowing")
+    def resolve_from_fsm(self, state: SalahState) -> SalahStateInfo:
+        """Map FSM state to Salah label from config."""
+        if state == SalahState.QIYAM:
             return self._state_or_fallback("Standing")
-
-        if stage in (RakatStage.WAIT_SECOND_LOW, RakatStage.WAIT_EXIT_SECOND_LOW):
+        if state == SalahState.RUKU:
+            return self._state_or_fallback("Bowing")
+        if state == SalahState.QAUMA:
+            return self._state_or_fallback("Rising from Bowing")
+        if state in (SalahState.SUJUD_1, SalahState.SUJUD_2):
+            return self._state_or_fallback("Prostration")
+        if state == SalahState.JALSA:
             return self._state_or_fallback("Sitting")
+        if state == SalahState.TASHAHHUD:
+            return self._state_or_fallback("Sitting Testimony")
+        if state == SalahState.QIYAM_NEXT:
+            return SalahStateInfo(
+                english="Standing (Next Rak'ah)",
+                arabic="Qiyam (Next Rak'ah)",
+                action="Standing for next unit after completed sujud cycle.",
+            )
 
         return SalahStateInfo(
-            english="Transition",
-            arabic="Transition",
+            english="Unknown/Transition",
+            arabic="Unknown/Transition",
             action="Moving between prayer positions.",
         )
 

@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 
 from salahsense.pose import PoseObservation
-from salahsense.state_machine import VerticalState
 
 LANDMARK_NAMES = [
     "nose",
@@ -70,12 +69,15 @@ class SessionLogger:
         frame_index: int,
         timestamp_ms: int,
         observation: PoseObservation,
-        state: VerticalState,
+        posture: str,
+        fsm_state: str,
+        state_changed: bool,
+        transition_reason: str,
+        feature_snapshot: dict,
         salah_state_english: str,
         salah_state_arabic: str,
         rakat_count: int,
         current_rakat: int,
-        matched_pattern: list[str],
     ) -> None:
         self._write(
             {
@@ -84,14 +86,15 @@ class SessionLogger:
                 "timestamp_ms": timestamp_ms,
                 "pose_detected": observation.pose_detected,
                 "nose_y": observation.nose_y,
-                "state_level": state.level.value,
-                "state_direction": state.direction.value,
-                "state_level_changed": state.level_changed,
+                "detected_posture": posture,
+                "fsm_state": fsm_state,
+                "state_changed": state_changed,
+                "transition_reason": transition_reason,
+                "features": feature_snapshot,
                 "salah_state_english": salah_state_english,
                 "salah_state_arabic": salah_state_arabic,
                 "rakat_count": rakat_count,
                 "current_rakat": current_rakat,
-                "matched_pattern": matched_pattern,
                 "landmarks": self._serialize_landmarks(observation.landmarks),
             }
         )
@@ -100,22 +103,18 @@ class SessionLogger:
         self,
         *,
         frame_index: int,
-        level: str,
-        matched_pattern: list[str],
+        state_name: str,
         rakat_count: int,
         current_rakat: int,
-        stage: str,
         reason: str,
     ) -> None:
         self._write(
             {
                 "event": "transition",
                 "frame_index": frame_index,
-                "level": level,
-                "matched_pattern": matched_pattern,
+                "state_name": state_name,
                 "rakat_count": rakat_count,
                 "current_rakat": current_rakat,
-                "stage": stage,
                 "reason": reason,
             }
         )
