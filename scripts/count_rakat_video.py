@@ -23,6 +23,7 @@ from salahsense.config.settings import load_settings
 from salahsense.counting import SalahSequenceTracker
 from salahsense.output import (
     SessionLogger,
+    UdpTelemetrySender,
     draw_pose_skeleton,
     draw_top_overlay,
     print_frame_debug,
@@ -33,6 +34,9 @@ from salahsense.output import (
 )
 from salahsense.pose import PoseEstimator
 from salahsense.state_machine import SalahStateMachine
+
+UDP_INTERFACE_NAME = "eth1"
+UDP_PORT = 5005
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,6 +73,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["2_rakat_prayer", "3_rakat_prayer", "4_rakat_prayer"],
         help="Which salah profile to run against sequence/target logic",
     )
+    parser.add_argument(
+        "--udp",
+        action="store_true",
+        help="Enable UDP telemetry sender on interface eth1 (broadcast, port 5005)",
+    )
     return parser
 
 
@@ -97,11 +106,20 @@ def main() -> None:
     # Lower stability window to keep transitions responsive in real-time use.
     state_machine = SalahStateMachine(min_stable_frames=2)
     logger = SessionLogger(log_path=args.log_file)
+    udp_sender = UdpTelemetrySender(
+        interface_name=UDP_INTERFACE_NAME,
+        port=UDP_PORT,
+        enabled=args.udp,
+    )
     previous_completed_rakats = 0
     target_reached_announced = False
     paused = False
     should_stop = False
     print(f"[INFO] Logging to: {args.log_file}")
+    print(
+        f"[INFO] UDP telemetry: {'enabled' if args.udp else 'disabled'} "
+        f"-> iface={UDP_INTERFACE_NAME}, broadcast={udp_sender.broadcast_ip}, port={UDP_PORT}"
+    )
     logger.log_startup(
         video_path=args.video,
         model_path=args.model,
@@ -186,6 +204,25 @@ def main() -> None:
                 rakat_count=update.completed_rakats,
                 current_rakat=update.current_rakat,
             )
+            udp_sender.send(
+                {
+                    "event": "overlay_frame",
+                    "frame_index": packet.frame_index,
+                    "timestamp_ms": packet.timestamp_ms,
+                    "prayer_name": sequence_profile.profile_name,
+                    "target_rakats": sequence_profile.expected_rakats,
+                    "completed_rakats": update.completed_rakats,
+                    "current_rakat": update.current_rakat,
+                    "salah_state_english": salah_state.english,
+                    "salah_state_arabic": salah_state.arabic,
+                    "fsm_state": update.state.value,
+                    "detected_posture": update.detected_posture.value,
+                    "reason": update.reason,
+                    "nose_y": observation.nose_y,
+                    "next_expected_state": next_expected,
+                    "sequence_progress": sequence_progress_text,
+                }
+            )
 
             if packet.frame_index % settings.runtime.frame_log_interval == 0:
                 print_frame_debug(
@@ -237,6 +274,7 @@ def main() -> None:
     finally:
         logger.log_summary(final_rakat_count=update.completed_rakats if 'update' in locals() else 0)
         logger.close()
+        udp_sender.close()
         estimator.close()
         reader.close()
         cv2.destroyAllWindows()

@@ -68,6 +68,7 @@ python scripts/count_rakat_video.py \
   --salah-states config/salah_states.json \
   --salah-sequences config/salah_sequences.json \
   --salah-type 2_rakat_prayer \
+  --udp \
   --log-file logs/rakat_run.jsonl
 ```
 
@@ -75,6 +76,14 @@ python scripts/count_rakat_video.py \
 
 `--salah-type` chooses one of the configured prayer profiles (`2_rakat_prayer`, `3_rakat_prayer`, `4_rakat_prayer`).
 The runner uses `salah_sequences.json` to track sequence progress and target rakat count.
+
+UDP telemetry sends the same overlay fields every frame as JSON packets (`event=overlay_frame`) over interface `eth1` broadcast on port `5005`.
+Telemetry is enabled only when `--udp` is present.
+
+Quick UDP listener example:
+```bash
+nc -ul 5005
+```
 
 Pipeline modules used:
 - `capture` -> frame reader and resizing
