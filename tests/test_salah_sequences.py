@@ -52,3 +52,94 @@ def test_sequence_tracker_accepts_qiyam_next_for_expected_qiyam() -> None:
 
     assert after == before + 1
 
+
+def test_sequence_tracker_reports_missing_state_on_forward_jump() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    catalog = SalahSequenceCatalog.from_json(str(repo_root / "config" / "salah_sequences.json"))
+    profile = catalog.get_profile("2_rakat_prayer")
+    tracker = SalahSequenceTracker(profile)
+
+    # Reach JALSA of first rakah (SUJUD_2 is expected next).
+    for state in profile.state_sequence[:5]:
+        tracker.on_state_change(state)
+
+    # User skips SUJUD_2 and stands up. Runtime often emits QIYAM_NEXT here.
+    progress = tracker.on_state_change(SalahState.QIYAM_NEXT)
+
+    assert progress.missing_states == (SalahState.SUJUD_2,)
+    # Should move to after first state of rakah 2.
+    assert progress.current_index == 7
+
+
+def test_completed_rakat_freezes_after_first_mistake() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    catalog = SalahSequenceCatalog.from_json(str(repo_root / "config" / "salah_sequences.json"))
+    profile = catalog.get_profile("2_rakat_prayer")
+    tracker = SalahSequenceTracker(profile)
+
+    # Mistake in first rakah: jump from SUJUD_1 directly to QIYAM_NEXT.
+    for state in [
+        SalahState.QIYAM,
+        SalahState.RUKU,
+        SalahState.QAUMA,
+        SalahState.SUJUD_1,
+        SalahState.QIYAM_NEXT,
+    ]:
+        progress = tracker.on_state_change(state)
+
+    assert progress.current_rakat == 2
+    assert progress.completed_rakats == 0
+
+    # Even if second rakah is done cleanly, completed stays frozen at 0.
+    for state in [
+        SalahState.RUKU,
+        SalahState.QAUMA,
+        SalahState.SUJUD_1,
+        SalahState.JALSA,
+        SalahState.SUJUD_2,
+        SalahState.TASHAHHUD,
+    ]:
+        progress = tracker.on_state_change(state)
+
+    assert progress.completed_rakats == 0
+
+
+def test_current_rakat_increments_when_standing_after_sajda() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    catalog = SalahSequenceCatalog.from_json(str(repo_root / "config" / "salah_sequences.json"))
+    profile = catalog.get_profile("2_rakat_prayer")
+    tracker = SalahSequenceTracker(profile)
+
+    for state in [
+        SalahState.QIYAM,
+        SalahState.RUKU,
+        SalahState.QAUMA,
+        SalahState.SUJUD_1,
+    ]:
+        tracker.on_state_change(state)
+
+    progress = tracker.on_state_change(SalahState.QIYAM_NEXT)
+    assert progress.current_rakat == 2
+
+
+def test_sequence_tracker_marks_ruku_and_qauma_missing_on_direct_sujud() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    catalog = SalahSequenceCatalog.from_json(str(repo_root / "config" / "salah_sequences.json"))
+    profile = catalog.get_profile("2_rakat_prayer")
+    tracker = SalahSequenceTracker(profile)
+
+    # Enter rakat 2 with first rakat complete.
+    for state in profile.state_sequence[:6]:
+        tracker.on_state_change(state)
+    tracker.on_state_change(SalahState.QIYAM_NEXT)
+
+    # Direct sujud should report both missing RUKU and QAUMA.
+    progress = tracker.on_state_change(SalahState.SUJUD_1)
+    assert progress.missing_states == (SalahState.RUKU, SalahState.QAUMA)
+    assert [
+        (entry.rakat_number, entry.state)
+        for entry in progress.missing_state_entries
+    ] == [
+        (2, SalahState.RUKU),
+        (2, SalahState.QAUMA),
+    ]

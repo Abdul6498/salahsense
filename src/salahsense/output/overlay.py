@@ -49,6 +49,7 @@ def draw_top_overlay(
     sequence_progress_text: str,
     reason: str,
     nose_y: float | None,
+    missing_states_text: str,
 ) -> None:
     """Draw small transparent text at the top of the frame."""
     nose_text = f"{nose_y:.3f}" if nose_y is not None else "N/A"
@@ -65,6 +66,7 @@ def draw_top_overlay(
         f"FSM State: {fsm_state}",
         f"Detected Posture: {posture}",
         f"Reason: {reason}",
+        f"Missing: {missing_states_text}",
         f"Nose Y: {nose_text}",
         "Space: Play/Pause | q: Quit",
     ]

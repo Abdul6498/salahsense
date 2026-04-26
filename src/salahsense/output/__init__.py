@@ -2,6 +2,7 @@
 
 from salahsense.output.console import (
     print_frame_debug,
+    print_missing_states,
     print_rakat_completed,
     print_startup,
     print_summary,
@@ -18,6 +19,7 @@ __all__ = [
     "draw_pose_skeleton",
     "draw_top_overlay",
     "print_frame_debug",
+    "print_missing_states",
     "print_rakat_completed",
     "print_startup",
     "print_summary",

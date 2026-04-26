@@ -27,6 +27,7 @@ from salahsense.output import (
     draw_pose_skeleton,
     draw_top_overlay,
     print_frame_debug,
+    print_missing_states,
     print_rakat_completed,
     print_startup,
     print_summary,
@@ -113,6 +114,7 @@ def main() -> None:
     )
     previous_completed_rakats = 0
     target_reached_announced = False
+    session_missing_states: list[str] = []
     paused = False
     should_stop = False
     print(f"[INFO] Logging to: {args.log_file}")
@@ -135,28 +137,36 @@ def main() -> None:
             update = state_machine.update(observation)
             salah_state = state_catalog.resolve_from_fsm(update.state)
 
-            if update.completed_rakats > previous_completed_rakats:
-                print_rakat_completed(update.completed_rakats)
-                previous_completed_rakats = update.completed_rakats
-
             if observation.pose_detected and observation.landmarks is not None:
                 draw_pose_skeleton(packet.frame_bgr, observation.landmarks)
 
             if update.state_changed:
                 sequence_progress = sequence_tracker.on_state_change(update.state)
+                if sequence_progress.missing_state_entries:
+                    missing_labels = [
+                        f"{entry.rakat_number}_{entry.state.value}"
+                        for entry in sequence_progress.missing_state_entries
+                    ]
+                    for missing_label in missing_labels:
+                        if missing_label not in session_missing_states:
+                            session_missing_states.append(missing_label)
+                    print_missing_states(missing_labels)
                 logger.log_transition(
                     frame_index=packet.frame_index,
                     state_name=update.state.value,
-                    rakat_count=update.completed_rakats,
-                    current_rakat=update.current_rakat,
+                    rakat_count=sequence_progress.completed_rakats,
+                    current_rakat=sequence_progress.current_rakat,
                     reason=update.reason,
                 )
                 print_transition(
                     state_name=update.state.value,
                     reason=update.reason,
-                    completed_rakats=update.completed_rakats,
-                    current_rakat=update.current_rakat,
+                    completed_rakats=sequence_progress.completed_rakats,
+                    current_rakat=sequence_progress.current_rakat,
                 )
+                if sequence_progress.completed_rakats > previous_completed_rakats:
+                    print_rakat_completed(sequence_progress.completed_rakats)
+                    previous_completed_rakats = sequence_progress.completed_rakats
 
             next_expected = (
                 sequence_progress.next_expected_state.value
@@ -164,13 +174,14 @@ def main() -> None:
                 else "DONE"
             )
             sequence_progress_text = f"{sequence_progress.current_index}/{sequence_progress.total_states}"
+            missing_text = " -> ".join(session_missing_states) if session_missing_states else "-"
 
             draw_top_overlay(
                 packet.frame_bgr,
                 prayer_name=sequence_profile.profile_name,
                 target_rakats=sequence_profile.expected_rakats,
-                rakat_count=update.completed_rakats,
-                current_rakat=update.current_rakat,
+                rakat_count=sequence_progress.completed_rakats,
+                current_rakat=sequence_progress.current_rakat,
                 fsm_state=update.state.value,
                 posture=update.detected_posture.value,
                 salah_state=f"{salah_state.english} ({salah_state.arabic})",
@@ -178,6 +189,7 @@ def main() -> None:
                 sequence_progress_text=sequence_progress_text,
                 reason=update.reason,
                 nose_y=observation.nose_y,
+                missing_states_text=missing_text,
             )
             cv2.imshow("SalahSense Phase-1 (press q to quit)", packet.frame_bgr)
             logger.log_frame(
@@ -201,8 +213,8 @@ def main() -> None:
                 sequence_index=sequence_progress.current_index,
                 sequence_total=sequence_progress.total_states,
                 next_expected_state=next_expected,
-                rakat_count=update.completed_rakats,
-                current_rakat=update.current_rakat,
+                rakat_count=sequence_progress.completed_rakats,
+                current_rakat=sequence_progress.current_rakat,
             )
             udp_sender.send(
                 {
@@ -211,8 +223,8 @@ def main() -> None:
                     "timestamp_ms": packet.timestamp_ms,
                     "prayer_name": sequence_profile.profile_name,
                     "target_rakats": sequence_profile.expected_rakats,
-                    "completed_rakats": update.completed_rakats,
-                    "current_rakat": update.current_rakat,
+                    "completed_rakats": sequence_progress.completed_rakats,
+                    "current_rakat": sequence_progress.current_rakat,
                     "salah_state_english": salah_state.english,
                     "salah_state_arabic": salah_state.arabic,
                     "fsm_state": update.state.value,
@@ -235,17 +247,17 @@ def main() -> None:
 
             if (
                 not target_reached_announced
-                and update.completed_rakats >= sequence_profile.expected_rakats
+                and sequence_progress.completed_rakats >= sequence_profile.expected_rakats
             ):
                 print(
                     f"[INFO] Target reached for {sequence_profile.profile_name}: "
-                    f"{update.completed_rakats}/{sequence_profile.expected_rakats} rakats."
+                    f"{sequence_progress.completed_rakats}/{sequence_profile.expected_rakats} rakats."
                 )
                 target_reached_announced = True
 
-            if update.completed_rakats > sequence_profile.expected_rakats:
+            if sequence_progress.completed_rakats > sequence_profile.expected_rakats:
                 print(
-                    f"[WARN] Extra rakat detected: {update.completed_rakats} "
+                    f"[WARN] Extra rakat detected: {sequence_progress.completed_rakats} "
                     f"(target {sequence_profile.expected_rakats})."
                 )
 
@@ -272,14 +284,16 @@ def main() -> None:
             if should_stop:
                 break
     finally:
-        logger.log_summary(final_rakat_count=update.completed_rakats if 'update' in locals() else 0)
+        logger.log_summary(
+            final_rakat_count=sequence_progress.completed_rakats if "sequence_progress" in locals() else 0
+        )
         logger.close()
         udp_sender.close()
         estimator.close()
         reader.close()
         cv2.destroyAllWindows()
 
-    print_summary(update.completed_rakats if 'update' in locals() else 0)
+    print_summary(sequence_progress.completed_rakats if "sequence_progress" in locals() else 0)
 
 
 if __name__ == "__main__":

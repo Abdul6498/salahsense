@@ -43,3 +43,9 @@ def print_rakat_completed(rakat_count: int) -> None:
 
 def print_summary(final_count: int) -> None:
     print(f"[SUMMARY] Final rakat count: {final_count}")
+
+
+def print_missing_states(missing_states: list[str]) -> None:
+    if not missing_states:
+        return
+    print(f"[MISSING] {' -> '.join(missing_states)}")
