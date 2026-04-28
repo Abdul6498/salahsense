@@ -20,10 +20,12 @@ from salahsense.capture import VideoReader
 from salahsense.config.salah_sequences import SalahSequenceCatalog
 from salahsense.config.salah_states import SalahStateCatalog
 from salahsense.config.settings import load_settings
-from salahsense.counting import SalahSequenceTracker
+from salahsense.counting import SalamDetector, SalahSequenceTracker
+from salahsense.face import FaceLandmarkerYawEstimator
 from salahsense.output import (
     SessionLogger,
     UdpTelemetrySender,
+    draw_face_landmarks,
     draw_pose_skeleton,
     draw_top_overlay,
     print_frame_debug,
@@ -34,10 +36,11 @@ from salahsense.output import (
     print_transition,
 )
 from salahsense.pose import PoseEstimator
-from salahsense.state_machine import SalahStateMachine
+from salahsense.state_machine import SalahState, SalahStateMachine
 
 UDP_INTERFACE_NAME = "eth1"
 UDP_PORT = 5005
+FACE_MODEL_PATH = "models/face_landmarker.task"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -92,6 +95,15 @@ def main() -> None:
     sequence_profile = sequence_catalog.get_profile(args.salah_type)
     sequence_tracker = SalahSequenceTracker(sequence_profile)
     sequence_progress = sequence_tracker.progress()
+    salam_detector = SalamDetector()
+    if not Path(FACE_MODEL_PATH).exists():
+        raise FileNotFoundError(
+            f"Face model not found: {FACE_MODEL_PATH}. "
+            "Download it with: "
+            "wget -O models/face_landmarker.task -q "
+            "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+        )
+    face_yaw_estimator = FaceLandmarkerYawEstimator(model_path=FACE_MODEL_PATH)
     print(
         f"[INFO] Salah type: {sequence_profile.profile_key} "
         f"({sequence_profile.profile_name}), target_rakats={sequence_profile.expected_rakats}"
@@ -115,6 +127,7 @@ def main() -> None:
     previous_completed_rakats = 0
     target_reached_announced = False
     session_missing_states: list[str] = []
+    prayed_rakat_at_finish: int | None = None
     paused = False
     should_stop = False
     print(f"[INFO] Logging to: {args.log_file}")
@@ -134,11 +147,14 @@ def main() -> None:
     try:
         for packet in reader.frames():
             observation = estimator.detect(packet)
+            face_observation = face_yaw_estimator.detect(packet)
             update = state_machine.update(observation)
             salah_state = state_catalog.resolve_from_fsm(update.state)
 
             if observation.pose_detected and observation.landmarks is not None:
                 draw_pose_skeleton(packet.frame_bgr, observation.landmarks)
+            if face_observation.face_detected and face_observation.landmarks is not None:
+                draw_face_landmarks(packet.frame_bgr, face_observation.landmarks)
 
             if update.state_changed:
                 sequence_progress = sequence_tracker.on_state_change(update.state)
@@ -168,6 +184,20 @@ def main() -> None:
                     print_rakat_completed(sequence_progress.completed_rakats)
                     previous_completed_rakats = sequence_progress.completed_rakats
 
+            # Enable salam in final tashahhud. Use current rakah gate so
+            # earlier sequence mistakes do not block detection.
+            is_final_tashahhud = (
+                update.state == SalahState.TASHAHHUD
+                and sequence_progress.current_rakat >= sequence_profile.expected_rakats
+            )
+            salam_update = salam_detector.update(
+                observation,
+                enabled=is_final_tashahhud,
+                yaw_score=face_observation.yaw_score,
+            )
+            if salam_update.prayer_finished and prayed_rakat_at_finish is None:
+                prayed_rakat_at_finish = sequence_progress.completed_rakats
+
             next_expected = (
                 sequence_progress.next_expected_state.value
                 if sequence_progress.next_expected_state is not None
@@ -184,12 +214,17 @@ def main() -> None:
                 current_rakat=sequence_progress.current_rakat,
                 fsm_state=update.state.value,
                 posture=update.detected_posture.value,
+                standing_subtype=update.standing_subtype.value,
                 salah_state=f"{salah_state.english} ({salah_state.arabic})",
                 next_expected_state=next_expected,
                 sequence_progress_text=sequence_progress_text,
                 reason=update.reason,
                 nose_y=observation.nose_y,
                 missing_states_text=missing_text,
+                prayer_finished=salam_update.prayer_finished,
+                salam_stage=salam_update.stage.value,
+                salam_turn=salam_update.first_turn_direction or "N/A",
+                prayed_rakat_at_finish=prayed_rakat_at_finish,
             )
             cv2.imshow("SalahSense Phase-1 (press q to quit)", packet.frame_bgr)
             logger.log_frame(
@@ -197,13 +232,17 @@ def main() -> None:
                 timestamp_ms=packet.timestamp_ms,
                 observation=observation,
                 posture=update.detected_posture.value,
+                standing_subtype=update.standing_subtype.value,
                 fsm_state=update.state.value,
                 state_changed=update.state_changed,
                 transition_reason=update.reason,
                 feature_snapshot={
                     "torso_from_vertical_deg": update.features.torso_from_vertical_deg,
                     "knee_angle_deg": update.features.knee_angle_deg,
+                    "elbow_angle_deg": update.features.elbow_angle_deg,
                     "nose_minus_hip_y": update.features.nose_minus_hip_y,
+                    "wrist_minus_hip_y": update.features.wrist_minus_hip_y,
+                    "wrist_to_torso_center_x": update.features.wrist_to_torso_center_x,
                     "hip_mid_y": update.features.hip_mid_y,
                 },
                 salah_state_english=salah_state.english,
@@ -215,6 +254,10 @@ def main() -> None:
                 next_expected_state=next_expected,
                 rakat_count=sequence_progress.completed_rakats,
                 current_rakat=sequence_progress.current_rakat,
+                prayer_finished=salam_update.prayer_finished,
+                salam_stage=salam_update.stage.value,
+                salam_turn=salam_update.first_turn_direction,
+                salam_yaw_score=salam_update.yaw_score,
             )
             udp_sender.send(
                 {
@@ -229,10 +272,13 @@ def main() -> None:
                     "salah_state_arabic": salah_state.arabic,
                     "fsm_state": update.state.value,
                     "detected_posture": update.detected_posture.value,
+                    "standing_subtype": update.standing_subtype.value,
                     "reason": update.reason,
                     "nose_y": observation.nose_y,
                     "next_expected_state": next_expected,
                     "sequence_progress": sequence_progress_text,
+                    "prayer_finished": salam_update.prayer_finished,
+                    "salam_stage": salam_update.stage.value,
                 }
             )
 
@@ -289,6 +335,7 @@ def main() -> None:
         )
         logger.close()
         udp_sender.close()
+        face_yaw_estimator.close()
         estimator.close()
         reader.close()
         cv2.destroyAllWindows()

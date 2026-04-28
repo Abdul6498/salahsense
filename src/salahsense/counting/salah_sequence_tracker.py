@@ -47,11 +47,20 @@ class SalahSequenceTracker:
         self._active_rakat_match_index = 0
         self._active_rakat_missing: list[SalahState] = []
         self._last_detected_state: SalahState | None = None
+        self._counted_rakat_indices: set[int] = set()
 
     def on_state_change(self, detected_state: SalahState) -> SequenceProgress:
         normalized_state = _normalize_runtime_state(detected_state)
         missing_entries: list[MissingStateEntry] = []
         total_states = len(self.profile.state_sequence)
+
+        # Once the configured sequence is done, freeze progress/counters.
+        # This prevents post-prayer movements (e.g., standing after final tashahhud)
+        # from mutating completed rakats.
+        if self._index >= total_states:
+            self._last_detected_state = normalized_state
+            return self.progress()
+
         if self._index < total_states:
             expected = self.profile.state_sequence[self._index]
             if _states_match(expected, normalized_state):
@@ -146,6 +155,10 @@ class SalahSequenceTracker:
         expected = active_sequence[self._active_rakat_match_index]
         if _states_match(expected, detected_state):
             self._active_rakat_match_index += 1
+            self._mark_completed_after_sujud2_if_valid(
+                detected_state=detected_state,
+                active_sequence=active_sequence,
+            )
             return []
 
         forward_match_index: int | None = None
@@ -178,9 +191,6 @@ class SalahSequenceTracker:
 
         if merged_missing:
             self._mistake_found = True
-        elif not self._mistake_found:
-            # Completed rakats remain "strict": freeze once the first mistake happens.
-            self._completed_rakats = self._active_rakat_index + 1
 
         if self._active_rakat_index < len(self._per_rakat_sequence) - 1:
             self._active_rakat_index += 1
@@ -195,6 +205,38 @@ class SalahSequenceTracker:
             merged_missing,
             rakat_number=active_rakat_number,
         )
+
+    def _mark_completed_after_sujud2_if_valid(
+        self,
+        *,
+        detected_state: SalahState,
+        active_sequence: list[SalahState],
+    ) -> None:
+        """Increment completed rakats strictly at SUJUD_2 when prerequisites are valid."""
+        if detected_state != SalahState.SUJUD_2:
+            return
+
+        if self._mistake_found:
+            return
+
+        active_rakat_idx = self._active_rakat_index
+        if active_rakat_idx in self._counted_rakat_indices:
+            return
+
+        if self._active_rakat_missing:
+            return
+
+        try:
+            sujud2_index = active_sequence.index(SalahState.SUJUD_2)
+        except ValueError:
+            return
+
+        # Match index has already advanced by one after this state was consumed.
+        if self._active_rakat_match_index < (sujud2_index + 1):
+            return
+
+        self._completed_rakats = max(self._completed_rakats, active_rakat_idx + 1)
+        self._counted_rakat_indices.add(active_rakat_idx)
 
 
 def _states_match(expected: SalahState, detected: SalahState) -> bool:

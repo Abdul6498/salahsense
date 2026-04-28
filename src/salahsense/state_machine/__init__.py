@@ -6,6 +6,7 @@ from salahsense.state_machine.salah_state_machine import (
     SalahState,
     SalahStateMachine,
     SalahStateUpdate,
+    StandingSubtype,
 )
 from salahsense.state_machine.vertical_state_machine import (
     MovementDirection,
@@ -21,6 +22,7 @@ __all__ = [
     "SalahState",
     "SalahStateMachine",
     "SalahStateUpdate",
+    "StandingSubtype",
     "VerticalLevel",
     "VerticalState",
     "VerticalStateMachine",

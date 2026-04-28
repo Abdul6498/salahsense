@@ -20,6 +20,12 @@ class BasePosture(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class StandingSubtype(str, Enum):
+    FOLDED = "FOLDED"
+    HANDS_DOWN = "HANDS_DOWN"
+    UNKNOWN = "UNKNOWN"
+
+
 class SalahState(str, Enum):
     QIYAM = "QIYAM"
     RUKU = "RUKU"
@@ -34,22 +40,28 @@ class SalahState(str, Enum):
 
 @dataclass(frozen=True)
 class PoseFeatures:
-    nose_y: float | None
-    shoulder_mid_y: float | None
-    hip_mid_y: float | None
-    knee_mid_y: float | None
-    ankle_mid_y: float | None
-    wrist_mid_y: float | None
-    torso_from_vertical_deg: float | None
-    knee_angle_deg: float | None
-    nose_minus_hip_y: float | None
-    shoulder_minus_hip_y: float | None
-    wrist_minus_knee_y: float | None
+    nose_y: float | None = None
+    shoulder_mid_y: float | None = None
+    hip_mid_y: float | None = None
+    knee_mid_y: float | None = None
+    ankle_mid_y: float | None = None
+    wrist_mid_y: float | None = None
+    wrist_mid_x: float | None = None
+    torso_center_x: float | None = None
+    torso_from_vertical_deg: float | None = None
+    knee_angle_deg: float | None = None
+    elbow_angle_deg: float | None = None
+    nose_minus_hip_y: float | None = None
+    shoulder_minus_hip_y: float | None = None
+    wrist_minus_knee_y: float | None = None
+    wrist_minus_hip_y: float | None = None
+    wrist_to_torso_center_x: float | None = None
 
 
 @dataclass(frozen=True)
 class SalahStateUpdate:
     detected_posture: BasePosture
+    standing_subtype: StandingSubtype
     state: SalahState
     state_changed: bool
     completed_rakats: int
@@ -70,10 +82,14 @@ class SalahStateMachine:
 
         self._last_candidate = BasePosture.UNKNOWN
         self._candidate_count = 0
+        self._last_standing_subtype = StandingSubtype.UNKNOWN
+        self._standing_subtype_count = 0
 
     def update(self, observation: Any) -> SalahStateUpdate:
         features = self._extract_features(observation)
         candidate = self._classify_posture(features)
+        standing_subtype = self._classify_standing_subtype(features, candidate)
+        stable_standing_subtype = self._stable_standing_subtype(standing_subtype)
 
         if candidate == self._last_candidate:
             self._candidate_count += 1
@@ -84,13 +100,18 @@ class SalahStateMachine:
         state_changed = False
         reason = "candidate_not_stable"
         if self._candidate_count >= self.min_stable_frames:
-            next_state, reason = self._transition(self._current_state, candidate)
+            next_state, reason = self._transition(
+                self._current_state,
+                candidate,
+                stable_standing_subtype,
+            )
             if next_state != self._current_state:
                 self._current_state = next_state
                 state_changed = True
 
         return SalahStateUpdate(
             detected_posture=candidate,
+            standing_subtype=stable_standing_subtype,
             state=self._current_state,
             state_changed=state_changed,
             completed_rakats=self._completed_rakats,
@@ -99,7 +120,12 @@ class SalahStateMachine:
             features=features,
         )
 
-    def _transition(self, state: SalahState, posture: BasePosture) -> tuple[SalahState, str]:
+    def _transition(
+        self,
+        state: SalahState,
+        posture: BasePosture,
+        standing_subtype: StandingSubtype,
+    ) -> tuple[SalahState, str]:
         if posture == BasePosture.UNKNOWN:
             return state, "posture_unknown"
 
@@ -114,10 +140,14 @@ class SalahStateMachine:
             if posture == BasePosture.SUJUD:
                 # Recovery path: user skipped Ruku and Qauma, then went directly to first sajda.
                 return SalahState.SUJUD_1, "qiyam_to_sujud_1_skipped_ruku_and_qauma"
+            if posture == BasePosture.STAND and standing_subtype == StandingSubtype.HANDS_DOWN:
+                return state, "holding_qiyam_hands_down"
             return state, "holding_qiyam"
 
         if state == SalahState.RUKU:
             if posture == BasePosture.STAND:
+                if standing_subtype == StandingSubtype.HANDS_DOWN:
+                    return SalahState.QAUMA, "ruku_to_qauma_hands_down"
                 return SalahState.QAUMA, "ruku_to_qauma"
             if posture == BasePosture.SUJUD:
                 # Recovery path: user skipped Qauma and moved directly to first sajda.
@@ -127,6 +157,8 @@ class SalahStateMachine:
         if state == SalahState.QAUMA:
             if posture == BasePosture.SUJUD:
                 return SalahState.SUJUD_1, "qauma_to_sujud_1"
+            if posture == BasePosture.STAND and standing_subtype == StandingSubtype.FOLDED:
+                return state, "holding_qauma_hands_folded"
             return state, "holding_qauma"
 
         if state == SalahState.SUJUD_1:
@@ -171,16 +203,6 @@ class SalahStateMachine:
         if not observation.pose_detected or observation.landmarks is None:
             return PoseFeatures(
                 nose_y=None,
-                shoulder_mid_y=None,
-                hip_mid_y=None,
-                knee_mid_y=None,
-                ankle_mid_y=None,
-                wrist_mid_y=None,
-                torso_from_vertical_deg=None,
-                knee_angle_deg=None,
-                nose_minus_hip_y=None,
-                shoulder_minus_hip_y=None,
-                wrist_minus_knee_y=None,
             )
 
         lm = observation.landmarks
@@ -190,6 +212,7 @@ class SalahStateMachine:
         l_hip, r_hip = lm[23], lm[24]
         l_knee, r_knee = lm[25], lm[26]
         l_ankle, r_ankle = lm[27], lm[28]
+        l_elbow, r_elbow = lm[13], lm[14]
         l_wrist, r_wrist = lm[15], lm[16]
 
         sh_mid = ((l_sh.x + r_sh.x) / 2.0, (l_sh.y + r_sh.y) / 2.0)
@@ -200,6 +223,8 @@ class SalahStateMachine:
 
         torso_deg = _angle_from_vertical_deg(sh_mid, hip_mid)
         knee_angle = (_joint_angle_deg(l_hip, l_knee, l_ankle) + _joint_angle_deg(r_hip, r_knee, r_ankle)) / 2.0
+        elbow_angle = (_joint_angle_deg(l_sh, l_elbow, l_wrist) + _joint_angle_deg(r_sh, r_elbow, r_wrist)) / 2.0
+        torso_center_x = (sh_mid[0] + hip_mid[0]) / 2.0
 
         return PoseFeatures(
             nose_y=float(nose.y),
@@ -208,11 +233,16 @@ class SalahStateMachine:
             knee_mid_y=float(knee_mid[1]),
             ankle_mid_y=float(ankle_mid[1]),
             wrist_mid_y=float(wrist_mid[1]),
+            wrist_mid_x=float(wrist_mid[0]),
+            torso_center_x=float(torso_center_x),
             torso_from_vertical_deg=torso_deg,
             knee_angle_deg=knee_angle,
+            elbow_angle_deg=elbow_angle,
             nose_minus_hip_y=float(nose.y - hip_mid[1]),
             shoulder_minus_hip_y=float(sh_mid[1] - hip_mid[1]),
             wrist_minus_knee_y=float(wrist_mid[1] - knee_mid[1]),
+            wrist_minus_hip_y=float(wrist_mid[1] - hip_mid[1]),
+            wrist_to_torso_center_x=float(abs(wrist_mid[0] - torso_center_x)),
         )
 
     def _classify_posture(self, features: PoseFeatures) -> BasePosture:
@@ -253,6 +283,51 @@ class SalahStateMachine:
             return BasePosture.STAND
 
         return BasePosture.UNKNOWN
+
+    def _classify_standing_subtype(
+        self,
+        features: PoseFeatures,
+        posture: BasePosture,
+    ) -> StandingSubtype:
+        if posture != BasePosture.STAND:
+            return StandingSubtype.UNKNOWN
+
+        wrist_minus_hip = features.wrist_minus_hip_y
+        elbow_angle = features.elbow_angle_deg
+        wrist_to_center_x = features.wrist_to_torso_center_x
+        if wrist_minus_hip is None:
+            return StandingSubtype.UNKNOWN
+
+        # Folded hands: wrists above hip line and relatively near torso center.
+        if (
+            wrist_minus_hip < -0.05
+            and (wrist_to_center_x is None or wrist_to_center_x < 0.12)
+            and (elbow_angle is None or elbow_angle < 165.0)
+        ):
+            return StandingSubtype.FOLDED
+
+        # Hands-down standing: wrists near hip region with straighter elbows.
+        if (
+            -0.04 <= wrist_minus_hip <= 0.18
+            and (elbow_angle is None or elbow_angle >= 145.0)
+        ):
+            return StandingSubtype.HANDS_DOWN
+
+        return StandingSubtype.UNKNOWN
+
+    def _stable_standing_subtype(self, standing_subtype: StandingSubtype) -> StandingSubtype:
+        if standing_subtype == self._last_standing_subtype:
+            self._standing_subtype_count += 1
+        else:
+            self._last_standing_subtype = standing_subtype
+            self._standing_subtype_count = 1
+
+        if (
+            standing_subtype != StandingSubtype.UNKNOWN
+            and self._standing_subtype_count >= self.min_stable_frames
+        ):
+            return standing_subtype
+        return StandingSubtype.UNKNOWN
 
 
 def _angle_from_vertical_deg(a: tuple[float, float], b: tuple[float, float]) -> float:

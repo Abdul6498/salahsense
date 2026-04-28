@@ -9,6 +9,7 @@ from salahsense.output.console import (
     print_transition,
 )
 from salahsense.output.file_logger import SessionLogger
+from salahsense.output.overlay import draw_face_landmarks
 from salahsense.output.overlay import draw_top_overlay
 from salahsense.output.overlay import draw_pose_skeleton
 from salahsense.output.udp_sender import UdpTelemetrySender
@@ -16,6 +17,7 @@ from salahsense.output.udp_sender import UdpTelemetrySender
 __all__ = [
     "SessionLogger",
     "UdpTelemetrySender",
+    "draw_face_landmarks",
     "draw_pose_skeleton",
     "draw_top_overlay",
     "print_frame_debug",

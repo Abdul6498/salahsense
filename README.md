@@ -60,6 +60,14 @@ python -m salahsense.app
 
 Use the first modular rakat counter pipeline on a local namaz video:
 
+Before running, download both required MediaPipe task models:
+
+```bash
+mkdir -p models
+wget -O models/pose_landmarker_lite.task -q https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task
+wget -O models/face_landmarker.task -q https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+```
+
 ```bash
 python scripts/count_rakat_video.py \
   --video videos/namaz_1.mp4 \
@@ -91,6 +99,22 @@ Pipeline modules used:
 - `state_machine` -> feature-based Salah FSM (`QIYAM -> RUKU -> QAUMA -> SUJUD_1 -> JALSA -> SUJUD_2 -> QIYAM_NEXT/TASHAHHUD`)
 - `counting` -> rakat counting from validated Salah-state transitions
 - `output` -> terminal logs and final rakat summary
+
+## Salam-Only Debug Mode
+
+To debug salam detection in isolation (without rakat/state logic), run:
+
+```bash
+python scripts/detect_salam_video.py \
+  --video videos/namaz_1.mp4 \
+  --face-model models/face_landmarker.task
+```
+
+This view shows:
+- face landmarks
+- yaw score
+- salam stage progression
+- prayer finished flag
 
 ## Step-by-Step Milestones
 

@@ -82,6 +82,7 @@ class SessionLogger:
         timestamp_ms: int,
         observation: PoseObservation,
         posture: str,
+        standing_subtype: str,
         fsm_state: str,
         state_changed: bool,
         transition_reason: str,
@@ -95,6 +96,10 @@ class SessionLogger:
         next_expected_state: str | None,
         rakat_count: int,
         current_rakat: int,
+        prayer_finished: bool,
+        salam_stage: str,
+        salam_turn: str | None,
+        salam_yaw_score: float | None,
     ) -> None:
         self._write(
             {
@@ -104,6 +109,7 @@ class SessionLogger:
                 "pose_detected": observation.pose_detected,
                 "nose_y": observation.nose_y,
                 "detected_posture": posture,
+                "standing_subtype": standing_subtype,
                 "fsm_state": fsm_state,
                 "state_changed": state_changed,
                 "transition_reason": transition_reason,
@@ -117,6 +123,10 @@ class SessionLogger:
                 "next_expected_state": next_expected_state,
                 "rakat_count": rakat_count,
                 "current_rakat": current_rakat,
+                "prayer_finished": prayer_finished,
+                "salam_stage": salam_stage,
+                "salam_turn": salam_turn,
+                "salam_yaw_score": salam_yaw_score,
                 "landmarks": self._serialize_landmarks(observation.landmarks),
             }
         )

@@ -18,6 +18,15 @@ POSE_CONNECTIONS = [
 ]
 
 
+def draw_face_landmarks(frame: cv2.typing.MatLike, landmarks: list) -> None:
+    """Draw small face-landmark points so detection is visible on-screen."""
+    frame_h, frame_w = frame.shape[:2]
+    for landmark in landmarks:
+        x_px = int(landmark.x * frame_w)
+        y_px = int(landmark.y * frame_h)
+        cv2.circle(frame, (x_px, y_px), 1, (80, 220, 80), thickness=-1)
+
+
 def draw_pose_skeleton(frame: cv2.typing.MatLike, landmarks: list) -> None:
     """Draw pose lines and points on the frame."""
     frame_h, frame_w = frame.shape[:2]
@@ -44,12 +53,17 @@ def draw_top_overlay(
     current_rakat: int,
     fsm_state: str,
     posture: str,
+    standing_subtype: str,
     salah_state: str,
     next_expected_state: str,
     sequence_progress_text: str,
     reason: str,
     nose_y: float | None,
     missing_states_text: str,
+    prayer_finished: bool,
+    salam_stage: str,
+    salam_turn: str,
+    prayed_rakat_at_finish: int | None,
 ) -> None:
     """Draw small transparent text at the top of the frame."""
     nose_text = f"{nose_y:.3f}" if nose_y is not None else "N/A"
@@ -65,11 +79,16 @@ def draw_top_overlay(
         f"Sequence: {sequence_progress_text}",
         f"FSM State: {fsm_state}",
         f"Detected Posture: {posture}",
+        f"Stand Subtype: {standing_subtype}",
         f"Reason: {reason}",
         f"Missing: {missing_states_text}",
+        f"Prayer Finished: {'YES' if prayer_finished else 'NO'}",
+        f"Salam: {salam_stage} ({salam_turn})",
         f"Nose Y: {nose_text}",
         "Space: Play/Pause | q: Quit",
     ]
+    if prayed_rakat_at_finish is not None:
+        lines.insert(3, f"Prayed Rakat: {prayed_rakat_at_finish}")
 
     y = 18
     for idx, line in enumerate(lines):

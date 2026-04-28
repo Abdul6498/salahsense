@@ -143,3 +143,47 @@ def test_sequence_tracker_marks_ruku_and_qauma_missing_on_direct_sujud() -> None
         (2, SalahState.RUKU),
         (2, SalahState.QAUMA),
     ]
+
+
+def test_sequence_tracker_freezes_after_done() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    catalog = SalahSequenceCatalog.from_json(str(repo_root / "config" / "salah_sequences.json"))
+    profile = catalog.get_profile("2_rakat_prayer")
+    tracker = SalahSequenceTracker(profile)
+
+    # Complete full 2-rakat sequence.
+    for state in profile.state_sequence:
+        tracker.on_state_change(state)
+    done_progress = tracker.progress()
+    assert done_progress.next_expected_state is None
+    completed_before = done_progress.completed_rakats
+
+    # Extra post-prayer movement should not mutate counters.
+    after = tracker.on_state_change(SalahState.QIYAM_NEXT)
+    assert after.completed_rakats == completed_before
+
+
+def test_completed_rakat_changes_on_sujud2_not_on_later_stand() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    catalog = SalahSequenceCatalog.from_json(str(repo_root / "config" / "salah_sequences.json"))
+    profile = catalog.get_profile("2_rakat_prayer")
+    tracker = SalahSequenceTracker(profile)
+
+    # Drive first rakah up to JALSA: completion must still be 0.
+    for state in [
+        SalahState.QIYAM,
+        SalahState.RUKU,
+        SalahState.QAUMA,
+        SalahState.SUJUD_1,
+        SalahState.JALSA,
+    ]:
+        progress = tracker.on_state_change(state)
+    assert progress.completed_rakats == 0
+
+    # SUJUD_2 marks completion.
+    progress = tracker.on_state_change(SalahState.SUJUD_2)
+    assert progress.completed_rakats == 1
+
+    # Standing after that should not increment completion again.
+    progress = tracker.on_state_change(SalahState.QIYAM_NEXT)
+    assert progress.completed_rakats == 1
