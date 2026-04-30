@@ -64,6 +64,7 @@ Use the first modular rakat counter pipeline on a local namaz video:
 python scripts/count_rakat_video.py \
   --video videos/namaz_1.mp4 \
   --model models/pose_landmarker_lite.task \
+  --pose-backend mediapipe \
   --config config/thresholds.toml \
   --salah-states config/salah_states.json \
   --salah-sequences config/salah_sequences.json \
@@ -71,6 +72,35 @@ python scripts/count_rakat_video.py \
   --udp \
   --log-file logs/rakat_run.jsonl
 ```
+
+For YOLO pose backend, use a YOLO pose `.pt` model:
+
+```bash
+python scripts/count_rakat_video.py \
+  --video videos/namaz_1.mp4 \
+  --model models/yolo11n-pose.pt \
+  --pose-backend yolo \
+  --config config/thresholds.toml \
+  --salah-states config/salah_states.json \
+  --salah-sequences config/salah_sequences.json \
+  --salah-type 2_rakat_prayer
+```
+
+For ViTPose backend, pass a Hugging Face model id (or local exported model dir):
+
+```bash
+python scripts/count_rakat_video.py \
+  --video videos/namaz_1.mp4 \
+  --model usyd-community/vitpose-base-simple \
+  --pose-backend vitpose \
+  --config config/thresholds.toml \
+  --salah-states config/salah_states.json \
+  --salah-sequences config/salah_sequences.json \
+  --salah-type 2_rakat_prayer
+```
+
+ViTPose backend uses YOLO person detection + ViTPose keypoints, then maps output into the
+same 33-landmark layout used by the FSM.
 
 `--log-file` writes detailed JSONL logs with per-frame state, transitions, rakat progress, and all pose landmarks (`index`, `name`, `x`, `y`, `z`, `visibility`, `presence`).
 

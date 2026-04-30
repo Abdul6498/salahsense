@@ -45,6 +45,13 @@ class PoseFeatures:
     nose_minus_hip_y: float | None
     shoulder_minus_hip_y: float | None
     wrist_minus_knee_y: float | None
+    left_wrist_to_left_thigh_norm: float | None
+    right_wrist_to_right_thigh_norm: float | None
+    hip_to_ankle_y_gap: float | None
+    left_wrist_to_left_knee_x_abs: float | None
+    right_wrist_to_right_knee_x_abs: float | None
+    left_wrist_visibility: float | None
+    right_wrist_visibility: float | None
 
 
 @dataclass(frozen=True)
@@ -61,8 +68,14 @@ class SalahStateUpdate:
 class SalahStateMachine:
     """State machine using relative pose geometry and valid Salah transitions."""
 
-    def __init__(self, min_stable_frames: int = 4) -> None:
+    def __init__(
+        self,
+        min_stable_frames: int = 4,
+        tashahhud_after_rakats: set[int] | None = None,
+    ) -> None:
         self.min_stable_frames = min_stable_frames
+        self.min_sujud2_sit_frames_for_tashahhud = 6
+        self.tashahhud_after_rakats = set(tashahhud_after_rakats or {2})
 
         self._current_state = SalahState.UNKNOWN
         self._completed_rakats = 0
@@ -70,6 +83,7 @@ class SalahStateMachine:
 
         self._last_candidate = BasePosture.UNKNOWN
         self._candidate_count = 0
+        self._sujud2_sit_count = 0
 
     def update(self, observation: Any) -> SalahStateUpdate:
         features = self._extract_features(observation)
@@ -84,7 +98,7 @@ class SalahStateMachine:
         state_changed = False
         reason = "candidate_not_stable"
         if self._candidate_count >= self.min_stable_frames:
-            next_state, reason = self._transition(self._current_state, candidate)
+            next_state, reason = self._transition(self._current_state, candidate, features)
             if next_state != self._current_state:
                 self._current_state = next_state
                 state_changed = True
@@ -99,8 +113,15 @@ class SalahStateMachine:
             features=features,
         )
 
-    def _transition(self, state: SalahState, posture: BasePosture) -> tuple[SalahState, str]:
+    def _transition(
+        self,
+        state: SalahState,
+        posture: BasePosture,
+        features: PoseFeatures | None = None,
+    ) -> tuple[SalahState, str]:
         if posture == BasePosture.UNKNOWN:
+            if state != SalahState.SUJUD_2:
+                self._sujud2_sit_count = 0
             return state, "posture_unknown"
 
         if state == SalahState.UNKNOWN:
@@ -147,24 +168,37 @@ class SalahStateMachine:
 
         if state == SalahState.SUJUD_2:
             if posture == BasePosture.STAND:
+                self._sujud2_sit_count = 0
                 self._completed_rakats += 1
                 self._current_rakat = self._completed_rakats + 1
                 return SalahState.QIYAM_NEXT, "left_sujud_2_to_qiyam_next_rakat_counted"
             if posture == BasePosture.SIT:
+                self._sujud2_sit_count += 1
+                if self._sujud2_sit_count < self.min_sujud2_sit_frames_for_tashahhud:
+                    return state, "confirming_tashahhud_sit"
+                if features is not None and not self._hands_on_thighs(features):
+                    return state, "sujud_2_sit_without_hands_on_thighs"
+                next_rakat_number = self._completed_rakats + 1
+                if next_rakat_number not in self.tashahhud_after_rakats:
+                    return state, "sujud_2_sit_not_valid_tashahhud_rakat"
                 # Treat as sitting after completed rakat (e.g. tashahhud situations).
                 self._completed_rakats += 1
                 # Keep current rakat unchanged while still sitting.
                 # It advances only when user stands for the next Qiyam.
                 self._current_rakat = max(1, self._completed_rakats)
+                self._sujud2_sit_count = 0
                 return SalahState.TASHAHHUD, "left_sujud_2_to_tashahhud_rakat_counted"
+            self._sujud2_sit_count = 0
             return state, "holding_sujud_2"
 
         if state == SalahState.TASHAHHUD:
+            self._sujud2_sit_count = 0
             if posture == BasePosture.STAND:
                 self._current_rakat = self._completed_rakats + 1
                 return SalahState.QIYAM_NEXT, "tashahhud_to_qiyam_next"
             return state, "holding_tashahhud"
 
+        self._sujud2_sit_count = 0
         return state, "no_transition_rule"
 
     def _extract_features(self, observation: Any) -> PoseFeatures:
@@ -181,6 +215,13 @@ class SalahStateMachine:
                 nose_minus_hip_y=None,
                 shoulder_minus_hip_y=None,
                 wrist_minus_knee_y=None,
+                left_wrist_to_left_thigh_norm=None,
+                right_wrist_to_right_thigh_norm=None,
+                hip_to_ankle_y_gap=None,
+                left_wrist_to_left_knee_x_abs=None,
+                right_wrist_to_right_knee_x_abs=None,
+                left_wrist_visibility=None,
+                right_wrist_visibility=None,
             )
 
         lm = observation.landmarks
@@ -200,6 +241,14 @@ class SalahStateMachine:
 
         torso_deg = _angle_from_vertical_deg(sh_mid, hip_mid)
         knee_angle = (_joint_angle_deg(l_hip, l_knee, l_ankle) + _joint_angle_deg(r_hip, r_knee, r_ankle)) / 2.0
+        l_thigh_mid = ((l_hip.x + l_knee.x) / 2.0, (l_hip.y + l_knee.y) / 2.0)
+        r_thigh_mid = ((r_hip.x + r_knee.x) / 2.0, (r_hip.y + r_knee.y) / 2.0)
+        torso_len = max(1e-4, _dist2d(sh_mid, hip_mid))
+        left_wrist_to_left_thigh_norm = _dist2d((l_wrist.x, l_wrist.y), l_thigh_mid) / torso_len
+        right_wrist_to_right_thigh_norm = _dist2d((r_wrist.x, r_wrist.y), r_thigh_mid) / torso_len
+        hip_to_ankle_y_gap = abs(hip_mid[1] - ankle_mid[1])
+        left_wrist_to_left_knee_x_abs = abs(l_wrist.x - l_knee.x)
+        right_wrist_to_right_knee_x_abs = abs(r_wrist.x - r_knee.x)
 
         return PoseFeatures(
             nose_y=float(nose.y),
@@ -213,7 +262,40 @@ class SalahStateMachine:
             nose_minus_hip_y=float(nose.y - hip_mid[1]),
             shoulder_minus_hip_y=float(sh_mid[1] - hip_mid[1]),
             wrist_minus_knee_y=float(wrist_mid[1] - knee_mid[1]),
+            left_wrist_to_left_thigh_norm=float(left_wrist_to_left_thigh_norm),
+            right_wrist_to_right_thigh_norm=float(right_wrist_to_right_thigh_norm),
+            hip_to_ankle_y_gap=float(hip_to_ankle_y_gap),
+            left_wrist_to_left_knee_x_abs=float(left_wrist_to_left_knee_x_abs),
+            right_wrist_to_right_knee_x_abs=float(right_wrist_to_right_knee_x_abs),
+            left_wrist_visibility=float(l_wrist.visibility),
+            right_wrist_visibility=float(r_wrist.visibility),
         )
+
+    def _hands_on_thighs(self, features: PoseFeatures) -> bool:
+        left = features.left_wrist_to_left_thigh_norm
+        right = features.right_wrist_to_right_thigh_norm
+        if left is None or right is None:
+            return False
+
+        left_close = left < 1.10
+        right_close = right < 1.10
+        left_vis = features.left_wrist_visibility or 0.0
+        right_vis = features.right_wrist_visibility or 0.0
+        x_left = features.left_wrist_to_left_knee_x_abs
+        x_right = features.right_wrist_to_right_knee_x_abs
+        if x_left is None or x_right is None:
+            return False
+
+        # Side camera can occlude one wrist. Accept one-sided confirmation
+        # only if the hidden side has low visibility.
+        one_side_with_occlusion = (
+            (left_close and x_left < 0.14 and right_vis < 0.35)
+            or (right_close and x_right < 0.14 and left_vis < 0.35)
+        )
+        both_sides = left_close and right_close and x_left < 0.16 and x_right < 0.16
+
+        wrists_not_high = (features.wrist_minus_knee_y or 0.0) < 0.12
+        return (both_sides or one_side_with_occlusion) and wrists_not_high
 
     def _classify_posture(self, features: PoseFeatures) -> BasePosture:
         if features.nose_y is None:
@@ -226,13 +308,21 @@ class SalahStateMachine:
         wrist_minus_knee = features.wrist_minus_knee_y
         hip_y = features.hip_mid_y or 0.0
         knee_y = features.knee_mid_y or 1.0
+        hip_ankle_gap = features.hip_to_ankle_y_gap or 1.0
 
         # Sujud: head significantly lower than hips, hips close to floor region.
         if nose_minus_hip > 0.18 and hip_y > 0.60:
             return BasePosture.SUJUD
 
-        # Jalsa/Tashahhud-like sitting: bent knees and hips low but head above sujud line.
-        if knee < 125 and hip_y > 0.64 and nose_minus_hip < 0.16:
+        # Jalsa/Tashahhud-like sitting:
+        # bent knees, hips close to ankles (seated on floor), torso not in heavy bow.
+        if (
+            knee < 125
+            and hip_y > 0.64
+            and nose_minus_hip < 0.16
+            and hip_ankle_gap < 0.20
+            and torso < 36
+        ):
             return BasePosture.SIT
 
         # Ruku: strong forward hinge with straight knees and body geometry
@@ -259,6 +349,10 @@ def _angle_from_vertical_deg(a: tuple[float, float], b: tuple[float, float]) -> 
     dx = b[0] - a[0]
     dy = b[1] - a[1]
     return abs(math.degrees(math.atan2(dx, dy)))
+
+
+def _dist2d(a: tuple[float, float], b: tuple[float, float]) -> float:
+    return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
 
 
 def _joint_angle_deg(a, b, c) -> float:

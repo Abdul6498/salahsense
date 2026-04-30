@@ -21,17 +21,29 @@ POSE_CONNECTIONS = [
 def draw_pose_skeleton(frame: cv2.typing.MatLike, landmarks: list) -> None:
     """Draw pose lines and points on the frame."""
     frame_h, frame_w = frame.shape[:2]
-    points: list[tuple[int, int]] = []
+    points: list[tuple[int, int] | None] = []
     for landmark in landmarks:
+        visibility = float(getattr(landmark, "visibility", 1.0))
+        if visibility < 0.01:
+            points.append(None)
+            continue
         x_px = int(landmark.x * frame_w)
         y_px = int(landmark.y * frame_h)
         points.append((x_px, y_px))
 
     for start_idx, end_idx in POSE_CONNECTIONS:
-        if start_idx < len(points) and end_idx < len(points):
+        if (
+            start_idx < len(points)
+            and end_idx < len(points)
+            and points[start_idx] is not None
+            and points[end_idx] is not None
+        ):
             cv2.line(frame, points[start_idx], points[end_idx], (255, 255, 255), 2)
 
-    for x_px, y_px in points:
+    for point in points:
+        if point is None:
+            continue
+        x_px, y_px = point
         cv2.circle(frame, (x_px, y_px), 3, (0, 120, 255), thickness=-1)
 
 

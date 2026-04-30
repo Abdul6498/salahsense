@@ -33,7 +33,7 @@ from salahsense.output import (
     print_summary,
     print_transition,
 )
-from salahsense.pose import PoseEstimator
+from salahsense.pose import create_pose_estimator
 from salahsense.state_machine import SalahStateMachine
 
 UDP_INTERFACE_NAME = "eth1"
@@ -46,7 +46,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model",
         default="models/pose_landmarker_full.task",
-        help="Path to pose landmarker .task model",
+        help="Pose model reference (.task for mediapipe, .pt for yolo, HF id/path for vitpose)",
+    )
+    parser.add_argument(
+        "--pose-backend",
+        default="mediapipe",
+        choices=["mediapipe", "yolo", "vitpose"],
+        help="Pose backend to use",
     )
     parser.add_argument(
         "--config",
@@ -97,15 +103,23 @@ def main() -> None:
         f"({sequence_profile.profile_name}), target_rakats={sequence_profile.expected_rakats}"
     )
 
-    if not Path(args.model).exists():
+    if args.pose_backend in {"mediapipe", "yolo"} and not Path(args.model).exists():
         raise FileNotFoundError(
-            f"Model not found: {args.model}. Put a pose_landmarker .task model at that path."
+            f"Model not found: {args.model}. "
+            "For mediapipe/yolo, pass a local model file path."
         )
 
     reader = VideoReader(video_path=args.video, process_width=settings.runtime.process_width)
-    estimator = PoseEstimator(model_path=args.model)
+    estimator = create_pose_estimator(backend=args.pose_backend, model_path=args.model)
     # Lower stability window to keep transitions responsive in real-time use.
-    state_machine = SalahStateMachine(min_stable_frames=2)
+    # Temporary debug mode:
+    # allow tashahhud transition after any rakat so we can validate
+    # joint/hand-placement logic in isolation.
+    tashahhud_after_rakats = {1, 2, 3, 4}
+    state_machine = SalahStateMachine(
+        min_stable_frames=2,
+        tashahhud_after_rakats=tashahhud_after_rakats,
+    )
     logger = SessionLogger(log_path=args.log_file)
     udp_sender = UdpTelemetrySender(
         interface_name=UDP_INTERFACE_NAME,
